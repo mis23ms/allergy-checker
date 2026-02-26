@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>藥物過敏比對</title>
+<meta name="theme-color" content="#111827"/>
+<link rel="manifest" href="./manifest.webmanifest"/>
+<style>
+:root{--bg:#070a14;--c:#111827;--m:#9ca3af;--t:#e5e7eb;--ok:#10b981;--w:#f59e0b;--r:#ef4444}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:15px/1.5 system-ui,-apple-system,"Noto Sans TC",sans-serif;background:var(--bg);color:var(--t)}
+.wrap{max-width:620px;margin:0 auto;padding:16px}
+h1{font-size:18px;font-weight:800;margin-bottom:3px}
+.sub{font-size:12px;color:var(--m);margin-bottom:12px}
+.card{background:rgba(17,24,39,.9);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px;margin-bottom:10px}
+.ct{font-weight:700;font-size:14px;margin-bottom:8px}
+textarea,input{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0b1224;color:var(--t);outline:none;font-size:14px}
+textarea{min-height:76px;resize:vertical}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+btn,button{padding:9px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#1f2937;color:var(--t);font-weight:700;font-size:13px;cursor:pointer}
+button:active{opacity:.7}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.1);background:#0b1224;margin:4px 4px 0 0;font-size:13px}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.ok{background:var(--ok)}.w{background:var(--w)}.r{background:var(--r)}
+.sm{font-size:12px;color:var(--m);line-height:1.7}
+.mn{font-family:ui-monospace,monospace;font-size:12px}
+hr{border:none;border-top:1px solid rgba(255,255,255,.07);margin:8px 0}
+label{font-size:12px;color:var(--m);display:block;margin-bottom:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>💊 藥物過敏比對</h1>
+  <div class="sub">貼成分、藥名或許可證字號 → 比對你的過敏清單</div>
+
+  <div class="card">
+    <label>成分 / 藥名（貼文字）</label>
+    <textarea id="text" placeholder="例：Sulfamethoxazole&#10;或：Ibuprofen 400mg/tab&#10;可貼多行"></textarea>
+    <div style="height:8px"></div>
+    <label>許可證字號（選填，可只貼數字）</label>
+    <input type="text" id="license" placeholder="例：內衛藥製字第010572號  或  010572"/>
+    <div class="row">
+      <button onclick="run()" style="background:#374151">▶ 比對</button>
+      <button onclick="doClear()">清空</button>
+      <button onclick="doShare()">🔗 複製連結</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">結果</div>
+    <div id="result" class="sm">尚未比對。</div>
+  </div>
+
+  <div class="card">
+    <div class="ct">我的過敏清單</div>
+    <div class="sm" style="margin-bottom:8px">只存本機，不上傳。</div>
+    <div class="row">
+      <button onclick="doEdit()">✏️ 編輯</button>
+      <button onclick="doExport()">⬇ 匯出</button>
+      <button onclick="$('file').click()">⬆ 匯入</button>
+      <input id="file" type="file" accept="application/json" style="display:none" onchange="doImport(event)"/>
+    </div>
+    <div id="ap" class="sm" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card sm">
+    <div id="disc"></div>
+    <hr/>
+    🟡 字號查不到成分 = 未驗證，不給綠燈<br/>
+    <span style="opacity:.5">資料來源：TFDA 43_2 + 36_2 開放資料集</span>
+  </div>
+</div>
+
+<script>
+const SK="allergy_checker_user_data_v2";
+const $=id=>document.getElementById(id);
+function esc(s){return(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c])}
+function nm(s){return(s||"").toLowerCase().replace(/\([^\)]*\)/g," ").replace(/[\[\]{}]/g," ").replace(/\bmg\b|\bml\b|\btab\b|\bcap\b|\bamp\b/gi," ").replace(/[+;,\/]/g," ").replace(/[^a-z0-9\u4e00-\u9fff\s.-]/g," ").replace(/\s+/g," ").trim()}
+function toks(s){const t=nm(s);return t?t.split(" ").filter(Boolean):[]}
+function nlc(s){return(s||"").replace(/\s+/g,"").trim()}
+function dlc(s){const m=(s||"").match(/(\d{5,7})/);return m?m[1]:""}
+function rk(v){return v==="high"||v==="bad"?3:v==="medium"||v==="warn"?2:1}
+function syn(t,s){return s[(t||"").toLowerCase()]||t}
+function expand(ts,bm){const o=[...ts];for(const t of ts){const k=(t||"").toLowerCase();if(bm[k])bm[k].forEach(a=>o.push(String(a).toLowerCase()))}return o}
+
+let BASE={},MAP={},USER={allergies:[]};
+
+async function init(){
+  BASE=await fetch("./data.json?v=2").then(r=>r.json()).catch(()=>({}));
+  $("disc").textContent=BASE.disclaimer||"";
+  // 嘗試載入 TFDA 成分索引
+  MAP=await fetch("./db/license_to_actives.json").then(r=>r.ok?r.json():{}).catch(()=>({}));
+  // 合併 data.json 裡的手動對照
+  Object.assign(MAP,BASE.license_to_actives||{});
+  const raw=localStorage.getItem(SK);
+  try{const p=JSON.parse(raw||"{}");USER=Array.isArray(p?.allergies)?p:{allergies:BASE.allergies||[]}}catch{USER={allergies:BASE.allergies||[]}}
+  renderAP();
+  const p=new URLSearchParams(location.search);
+  if(p.get("text"))$("text").value=p.get("text");
+  if(p.get("license"))$("license").value=p.get("license");
+  if(p.get("text")||p.get("license"))run();
+}
+
+function renderAP(){
+  $("ap").innerHTML=USER.allergies.map(a=>`• ${esc(a.value)}${a.note?` <span style="opacity:.6">(${esc(a.note)})</span>`:""}`).join("<br>")||"（空）";
+}
+
+function run(){
+  const rawT=$("text").value||"",rawL=$("license").value||"";
+  const lf=nlc(rawL),ld=dlc(rawL);
+
+  // 查字號→成分
+  const entry=(lf&&MAP[lf])||(ld&&MAP[ld])||null;
+  const acts=Array.isArray(entry?.actives)?entry.actives:(Array.isArray(entry)?entry:[]);
+  const verified=!!(lf||ld)&&acts.length>0;
+  let vwhy="";
+  if(lf||ld){if(!acts.length)vwhy="字號查不到成分（未收錄）"}
+  else if(rawT){vwhy="僅輸入文字，未連動官方字號成分"}
+  else{vwhy="未輸入任何資料"}
+
+  const vok=verified;
+  const allToks=toks(rawT+" "+acts.join(" "));
+  const {dh,gh}=match(allToks);
+
+  const worst=Math.max(...gh.map(g=>rk(g.severity)),...(dh.length?[3]:[1]));
+  let st="w",stxt="🟡 未命中（未驗證）";
+  if(worst>=3){st="r";stxt="🔴 高風險命中"}
+  else if(worst===2){st="w";stxt="🟡 可能相關"}
+  else if(vok){st="ok";stxt="🟢 已驗證未命中"}
+
+  let h=`<div class="pill"><span class="dot ${st}"></span><b>${esc(stxt)}</b></div>`;
+  if(!vok&&worst<3&&vwhy)h+=`<div class="sm" style="margin-top:6px">原因：${esc(vwhy)}</div>`;
+  h+="<hr>";
+
+  if(gh.length){
+    h+=`<div style="font-size:13px;font-weight:700;margin-bottom:4px">族群命中</div>`;
+    [...gh].sort((a,b)=>rk(b.severity)-rk(a.severity)).forEach(g=>{
+      const s=rk(g.severity)>=3?"r":"w";
+      h+=`<div class="pill"><span class="dot ${s}"></span>${esc(g.name)}<span class="mn"> （${esc(g.hit.join(", "))}）</span></div>`;
+    });
+    h+="<hr>";
+  }
+  if(dh.length){
+    h+=`<div style="font-size:13px;font-weight:700;margin-bottom:4px">直接命中</div>`;
+    dh.forEach(d=>h+=`<div class="pill"><span class="dot r"></span>${esc(d.value)}${d.note?` <span class="sm">(${esc(d.note)})</span>`:""}</div>`);
+    h+="<hr>";
+  }
+
+  // 診斷資訊
+  h+=`<div class="mn" style="opacity:.5;line-height:2">`;
+  h+=`藥名：${esc(rawT||"—")}<br>`;
+  h+=`字號：${esc(rawL||"—")}<br>`;
+  h+=`由字號取得成分：${esc(acts.length?acts.join(", "):"（無）")}`;
+  if(entry?.name_zh)h+=`<br>品名：${esc(entry.name_zh)}`;
+  h+=`</div>`;
+
+  $("result").innerHTML=h;
+}
+
+function match(tokList){
+  const s=BASE.synonyms||{},bm=BASE.brand_to_actives||{};
+  const nt=tokList.map(t=>syn(t,s));
+  const ex=expand(nt,bm).map(t=>syn(t,s));
+  const ts=new Set(ex);
+  const dh=[],seen=new Set();
+  for(const a of USER.allergies){
+    const v=syn(nm(a.value),s);
+    if(!v)continue;
+    if(ts.has(v)){const k=v+"::"+a.value;if(!seen.has(k)){seen.add(k);dh.push({value:a.value,note:a.note||""})}}
+  }
+  for(const a of USER.allergies){
+    const av=(a.value||"").trim();
+    if(av.length>=2&&/[\u4e00-\u9fff]/.test(av)&&ex.join(" ").includes(nm(av))){
+      const k=nm(av)+"::"+av;if(!seen.has(k)){seen.add(k);dh.push({value:av,note:a.note||""})}
+    }
+  }
+  const gh=[];
+  for(const g of(BASE.groups||[])){
+    const hit=(g.members||[]).filter(m=>ts.has(String(m).toLowerCase()));
+    if(hit.length)gh.push({name:g.name,severity:g.severity||"warn",hit});
+  }
+  return{dh,gh};
+}
+
+function doClear(){$("text").value="";$("license").value="";$("result").innerHTML="已清空。";history.replaceState(null,"",location.pathname)}
+async function doShare(){
+  const u=new URL(location.href);
+  if($("text").value)u.searchParams.set("text",$("text").value);else u.searchParams.delete("text");
+  if($("license").value)u.searchParams.set("license",$("license").value);else u.searchParams.delete("license");
+  try{await navigator.clipboard.writeText(u.toString());alert("✅ 已複製連結")}catch{prompt("複製連結：",u.toString())}
+}
+function doEdit(){
+  const next=prompt("以 JSON 編輯過敏清單：",JSON.stringify(USER.allergies,null,2));
+  if(!next)return;
+  try{
+    const p=JSON.parse(next);
+    if(!Array.isArray(p))throw 0;
+    USER.allergies=p.filter(x=>x?.value).map(x=>({type:x.type||"active",value:x.value.trim(),note:x.note||""})).filter(x=>x.value);
+    localStorage.setItem(SK,JSON.stringify(USER));
+    renderAP();alert("✅ 已更新（只存本機）");
+  }catch{alert("JSON 格式錯誤，未更新")}
+}
+function doExport(){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(USER.allergies,null,2)],{type:"application/json"}));
+  a.download="my_allergies.json";document.body.appendChild(a);a.click();a.remove();
+}
+function doImport(e){
+  const f=e.target.files?.[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const p=JSON.parse(r.result);if(!Array.isArray(p))throw 0;
+      USER.allergies=p.filter(x=>x?.value).map(x=>({type:x.type||"active",value:x.value.trim(),note:x.note||""})).filter(x=>x.value);
+      localStorage.setItem(SK,JSON.stringify(USER));renderAP();alert("✅ 匯入完成");
+    }catch{alert("匯入失敗：JSON 格式不正確")}
+  };
+  r.readAsText(f);e.target.value="";
+}
+
+init();
+</script>
+</body>
+</html>

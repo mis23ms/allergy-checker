@@ -1,0 +1,64 @@
+{
+  "version": "2.0.0",
+  "generated_at": "2026-02-26",
+  "allergies": [
+    { "type": "active", "value": "ketoprofen",   "note": "from record" },
+    { "type": "active", "value": "flurbiprofen", "note": "from record" },
+    { "type": "active", "value": "ibuprofen",    "note": "from record" },
+    { "type": "active", "value": "naproxen",     "note": "from record" },
+    { "type": "active", "value": "ketorolac",    "note": "from record" },
+    { "type": "active", "value": "aspirin",      "note": "from record" },
+    { "type": "active", "value": "diclofenac",   "note": "from record" },
+    { "type": "brand_or_text", "value": "baktar",      "note": "Baktar / Bakter" },
+    { "type": "brand_or_text", "value": "止膿敏點眼液", "note": "self record" }
+  ],
+  "synonyms": {
+    "diclofenac sodium":     "diclofenac",
+    "diclofenac pot.":       "diclofenac",
+    "diclofenac potassium":  "diclofenac",
+    "votan sr":              "diclofenac",
+    "ketorolac tromethamine":"ketorolac",
+    "ibuprofen 400 mg/tab":  "ibuprofen",
+    "ibuprofen 400mg/tab":   "ibuprofen",
+    "naproxen 250mg/tab":    "naproxen",
+    "naproxen sodium":       "naproxen",
+    "aspirin 100mg/tab":     "aspirin",
+    "acetylsalicylic acid":  "aspirin",
+    "bakter":                "baktar",
+    "baktar":                "baktar",
+    "sinomin":               "sulfamethoxazole",
+    "止膿敏":                "sulfamethoxazole",
+    "止膿敏點眼液":          "sulfamethoxazole"
+  },
+  "groups": [
+    {
+      "id": "nsaids",
+      "name": "NSAIDs（非類固醇消炎止痛藥）",
+      "severity": "high",
+      "members": [
+        "ketoprofen", "flurbiprofen", "ibuprofen", "naproxen",
+        "ketorolac", "aspirin", "diclofenac", "acetylsalicylic acid",
+        "celecoxib", "meloxicam", "indomethacin", "piroxicam",
+        "sulindac", "etodolac", "mefenamic acid", "lornoxicam"
+      ]
+    },
+    {
+      "id": "sulfonamide_antibiotics",
+      "name": "磺胺類抗生素（Sulfonamide）",
+      "severity": "high",
+      "members": [
+        "sulfamethoxazole", "sulfadiazine", "sulfisoxazole",
+        "sulfacetamide", "sulfadoxine", "sulfasalazine",
+        "dapsone", "trimethoprim-sulfamethoxazole"
+      ]
+    }
+  ],
+  "brand_to_actives": {
+    "baktar":     ["sulfamethoxazole", "trimethoprim"],
+    "bakter":     ["sulfamethoxazole", "trimethoprim"],
+    "sinomin":    ["sulfamethoxazole"],
+    "止膿敏點眼液": ["sulfamethoxazole"],
+    "止膿敏":     ["sulfamethoxazole"]
+  },
+  "disclaimer": "此工具僅供自我核對與溝通參考，不能取代醫師／藥師判斷。若出現呼吸困難、全身蕁麻疹、喉頭腫脹等嚴重過敏症狀，請立刻就醫。"
+}
