@@ -163,3 +163,4 @@ python build_db_csv.py
 5. 對方可以修改自己的 `data.json` 過敏清單
 
 適合：對方想要完全獨立、可自行修改的版本。
+
